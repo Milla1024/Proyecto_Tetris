@@ -4,11 +4,11 @@ org 100h
 COLOR_BORDE equ 15
 
 ; medidas del tablero
-COLS  equ 10
-ROWS  equ 20
-CELL  equ 8
-X0    equ 121         ; donde empieza la columna
-Y0    equ 21          ; donde empieza la fila
+COLS  equ 10         
+ROWS  equ 20          
+CELL  equ 8           
+X0    equ 121         ; donde empieza la columna 
+Y0    equ 21          ; donde empieza la fila 
 
 
 inicio:
@@ -16,10 +16,7 @@ inicio:
     call dibujar_tablero
     call limpiar_tablero
 
-    mov byte [pieza_id], 0
-    mov byte [pieza_col], 3
-    mov byte [pieza_row], 0
-
+    call nueva_pieza
     call actualizar_pieza
 
 
@@ -48,7 +45,6 @@ inicio:
     cmp al, 1
     je .actualizar
 
-    ; si no es valido regreso a la posicion anterior
     inc byte [pieza_col]
 
     jmp .bucle
@@ -61,7 +57,6 @@ inicio:
     cmp al, 1
     je .actualizar
 
-    ; si no es valido regreso a la posicion anterior
     dec byte [pieza_col]
 
     jmp .bucle
@@ -74,13 +69,9 @@ inicio:
     cmp al, 1
     je .actualizar
 
-    ; si no puede bajar regreso a la ultima posicion valida
     dec byte [pieza_row]
 
-    ; guardar la pieza actual en la matriz
     call fijar_pieza
-
-    ; crear la siguiente pieza arriba
     call nueva_pieza
 
     call actualizar_pieza
@@ -97,6 +88,7 @@ inicio:
     call salir_programa
 
 
+
 iniciar_video:
     mov ax, 0013h
     int 10h
@@ -106,7 +98,8 @@ iniciar_video:
     ret
 
 
-; limpiar la matriz
+
+; limpiar la matriz 
 limpiar_tablero:
     push ax
     push cx
@@ -127,15 +120,17 @@ limpiar_tablero:
     ret
 
 
+
 ; actualiza lo que se ve en pantalla
-; primero dibuja las piezas fijas y luego la pieza activa
 actualizar_pieza:
     call dibujar_matriz
     call dibujar_pieza_activa
     ret
 
 
+
 ; validar que la pieza no salga de los bordes
+; y que no choque con una posicion ocupada
 ; AL = 1 si la posicion es valida
 ; AL = 0 si la posicion es invalida
 validar_posicion:
@@ -150,10 +145,11 @@ validar_posicion:
     mov ah, 0
 
     mov si, ax
-    shl si, 3                  ; id * 8
+    shl si, 3
     add si, formas
 
     mov cx, 4
+
 
 .vp:
     ; validar columna
@@ -169,9 +165,10 @@ validar_posicion:
     cmp ax, COLS
     jae .invalida
 
-    mov bp, ax                 ; guardar columna real
+    mov bp, ax
 
     inc si
+
 
     ; validar fila
 
@@ -186,22 +183,28 @@ validar_posicion:
     cmp ax, ROWS
     jae .invalida
 
-    ; AX = fila real
-    ; BP = columna real
+    inc si
+
+
+    ; calcular posicion dentro de la matriz
+    ; posicion = fila * 10 + columna
 
     mov dx, COLS
-    mul dx                     ; AX = fila * 10
+    mul dx
 
-    add ax, bp                 ; AX = fila * 10 + columna
+    add ax, bp
 
     mov di, ax
+
+
+    ; revisar si esa posicion ya esta ocupada
 
     cmp byte [tablero + di], 0
     jne .invalida
 
-    inc si
 
     loop .vp
+
 
     mov al, 1
     jmp .fin
@@ -221,30 +224,54 @@ validar_posicion:
     ret
 
 
-; guardar definitivamente la pieza actual en la matriz
+
+; guardar la pieza actual en la matriz
 fijar_pieza:
     mov al, [pieza_id]
     call colocar_pieza
     ret
 
 
-; crear una nueva pieza arriba
+
+; crear una nueva pieza
 nueva_pieza:
     mov byte [pieza_col], 3
     mov byte [pieza_row], 0
 
-    inc byte [pieza_id]
+    call pieza_aleatoria
 
-    cmp byte [pieza_id], 5
-    jl .np_fin
-
-    mov byte [pieza_id], 0
-
-.np_fin:
     ret
 
 
-; colocar la pieza en la posicion actual dentro de la matriz
+
+; generar una pieza aleatoria entre 0 y 4
+pieza_aleatoria:
+    push ax
+    push bx
+    push cx
+    push dx
+
+    mov ah, 00h
+    int 1Ah
+
+    mov ax, dx
+
+    xor dx, dx
+
+    mov bx, 5
+    div bx
+
+    mov [pieza_id], dl
+
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+
+
+; colocar la pieza en la posicion inicial
 ; AL es el id de la pieza 0=O 1=T 2=I 3=L 4=Z
 colocar_pieza:
     push ax
@@ -256,44 +283,46 @@ colocar_pieza:
     push bp
 
     mov ah, 0
-    mov bp, ax
+    mov bp, ax                 
 
     mov bx, bp
-    mov dh, [colores + bx]     ; color de la pieza
+    mov dh, [colores + bx]     ; color de la puieza
 
     mov si, bp
     shl si, 3                  ; id * 8
-    add si, formas
+    add si, formas             
 
-    mov cx, 4
+    mov cx, 4                 
+
 
 .cp:
-    mov al, [si]
-    add al, [pieza_col]
+    mov al, [si]               
+    add al, [pieza_col]          
     mov bl, al
     inc si
 
-    mov al, [si]
-    add al, [pieza_row]
+    mov al, [si]              
+    add al, [pieza_row]         
     inc si
 
-    mov ah, 0
+    mov ah, 0                  
 
-    push dx
+    push dx                   
 
     mov dx, COLS
-    mul dx
+    mul dx                    
 
     mov bh, 0
-    add ax, bx
+    add ax, bx                 
 
     mov di, ax
 
-    pop dx
+    pop dx                   
 
     mov [tablero + di], dh     ; gaurdar el color en la matriz
 
     loop .cp
+
 
     pop bp
     pop di
@@ -305,8 +334,8 @@ colocar_pieza:
     ret
 
 
-; dibujar la pieza que actualmente se esta moviendo
-; esta pieza todavia no se guarda en tablero
+
+; dibujar la pieza que se esta moviendo
 dibujar_pieza_activa:
     push ax
     push bx
@@ -316,48 +345,62 @@ dibujar_pieza_activa:
     push di
     push bp
 
+
     mov al, [pieza_id]
     mov ah, 0
 
+
     mov bx, ax
     mov dh, [colores + bx]
+
 
     mov si, ax
     shl si, 3
     add si, formas
 
+
     mov cx, 4
 
+
 .dpa:
-    ; calcular X del bloque
+    ; calcular X
+
     xor ax, ax
     mov al, [si]
+
     add al, [pieza_col]
+
     shl ax, 3
     add ax, X0
+
     mov di, ax
 
     inc si
 
-    ; calcular Y del bloque
+
+    ; calcular Y
+
     xor ax, ax
     mov al, [si]
+
     add al, [pieza_row]
+
     shl ax, 3
     add ax, Y0
+
     mov bx, ax
 
     inc si
 
-    ; AX = X
-    ; BX = Y
-    ; DL = color
+
     mov ax, di
     mov dl, dh
 
     call dibujar_bloque
 
+
     loop .dpa
+
 
     pop bp
     pop di
@@ -369,7 +412,8 @@ dibujar_pieza_activa:
     ret
 
 
-; dibujar toda la matriz
+
+; dibujar toda la matriz 
 dibujar_matriz:
     push ax
     push bx
@@ -379,37 +423,51 @@ dibujar_matriz:
 
     xor si, si
 
+
 .dm:
     mov ax, si
     xor dx, dx
+
     mov cx, COLS
-    div cx
+    div cx                     
 
-    push ax
 
-    mov ax, dx
-    shl ax, 3
-    add ax, X0
+    push ax                    
 
-    pop cx
 
-    push ax
+    mov ax, dx                
+    shl ax, 3                 
+    add ax, X0                 
+
+
+    pop cx                    
+
+
+    push ax                   
+
 
     mov ax, cx
-    shl ax, 3
-    add ax, Y0
+    shl ax, 3                  
+    add ax, Y0                 
+
 
     mov bx, ax
 
-    pop ax
 
-    mov dl, [tablero + si]
+    pop ax                     
+
+
+    mov dl, [tablero + si]     
+
 
     call dibujar_bloque
 
+
     inc si
+
     cmp si, COLS*ROWS
     jl .dm
+
 
     pop si
     pop dx
@@ -417,6 +475,7 @@ dibujar_matriz:
     pop bx
     pop ax
     ret
+
 
 
 dibujar_bloque:
@@ -435,7 +494,9 @@ dibujar_bloque:
 
     mov cx, 8
 
+
 .fila:;Aqui se hace un calculo para la posicion del pixel por como se guarda vga 67*320+100 con nuestros datos arriba
+
     push cx
 
     mov ax, si
@@ -447,8 +508,10 @@ dibujar_bloque:
 
     mov cx, 8
 
+
 .pixel:
     ;esto pinta hacia la derecha desde los 100 pixeles 8 pixeles hacia la derecha
+
     mov [es:di], bl
     inc di
     loop .pixel
@@ -457,6 +520,7 @@ dibujar_bloque:
 
     pop cx
     loop .fila
+
 
     pop bp
     pop di
@@ -468,13 +532,15 @@ dibujar_bloque:
     ret
 
 
+
 dibujar_tablero:;se definen los bordes del tablero y luego se dibuja desde el borde al pixel definido
 
     mov ax, 120
     mov bx, 20
-    mov cx, 82;mide 82 pixeles
+    mov cx, 82; mide 82 pixeles
     mov dl, COLOR_BORDE
     call linea_horizontal
+
 
     mov ax, 120
     mov bx, 181
@@ -482,11 +548,13 @@ dibujar_tablero:;se definen los bordes del tablero y luego se dibuja desde el bo
     mov dl, COLOR_BORDE
     call linea_horizontal
 
+
     mov ax, 120
     mov bx, 20
     mov cx, 162;mide 162 pixeles
     mov dl, COLOR_BORDE
     call linea_vertical
+
 
     mov ax, 201
     mov bx, 20
@@ -495,6 +563,7 @@ dibujar_tablero:;se definen los bordes del tablero y luego se dibuja desde el bo
     call linea_vertical
 
     ret
+
 
 
 linea_horizontal:
@@ -517,10 +586,12 @@ linea_horizontal:
     add ax, bp
     mov di, ax
 
+
 .ph:
     mov [es:di], bl
     inc di
     loop .ph
+
 
     pop bp
     pop di
@@ -530,6 +601,7 @@ linea_horizontal:
     pop bx
     pop ax
     ret
+
 
 
 linea_vertical:
@@ -545,6 +617,7 @@ linea_vertical:
     mov si, bx
     mov bl, dl
 
+
 .pv:
     mov ax, si
     mov di, 320
@@ -558,6 +631,7 @@ linea_vertical:
     inc si
     loop .pv
 
+
     pop bp
     pop di
     pop si
@@ -568,10 +642,12 @@ linea_vertical:
     ret
 
 
+
 leer_tecla:
     mov ah, 00h
     int 16h
     ret
+
 
 
 restaurar_video:
@@ -580,9 +656,11 @@ restaurar_video:
     ret
 
 
+
 salir_programa:
     mov ax, 4C00h
     int 21h
+
 
 
 ; el color de cada pieza
@@ -594,7 +672,8 @@ colores:
     db 4       ; Z
 
 
-; las 5 piezas cada una con sus 4 bloques en pares
+
+; las 5 piezas cada una con sus 4 bloques en pares 
 formas:
     db 0,0, 1,0, 0,1, 1,1      ; O
     db 1,0, 0,1, 1,1, 2,1      ; T
@@ -603,11 +682,13 @@ formas:
     db 0,0, 1,0, 1,1, 2,1      ; Z
 
 
+
 ; posicion y tipo de la pieza actual
 pieza_col db 3
 pieza_row db 0
 pieza_id  db 0
 
 
-; la matriz del tablero
+
+; la matriz del tablero 
 tablero: times COLS*ROWS db 0
