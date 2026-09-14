@@ -15,16 +15,28 @@ inicio:
     call iniciar_video
     call dibujar_tablero
     call limpiar_tablero
+    call leer_ticks
+    mov[ticks_previos], ax
 
     call nueva_pieza
     call actualizar_pieza
 
 
 .bucle:
-    call leer_tecla
+    call revisar_caida          ; la pieza baja sola con el tiempo
+
+    mov ah, 01h                
+    int 16h
+    jz .bucle                  
+
+    mov ah, 00h                
+    int 16h
 
     cmp al, 27
     je .salir
+
+    cmp ah, 48h                 ; flecha arriba es rotar
+    je .rotar
 
     cmp ah, 4Bh
     je .izquierda
@@ -36,6 +48,11 @@ inicio:
     je .abajo
 
     jmp .bucle
+
+
+.rotar:
+    call rotar_pieza
+    jmp .actualizar
 
 
 .izquierda:
@@ -128,6 +145,92 @@ actualizar_pieza:
     ret
 
 
+leer_ticks:
+    push es 
+    push bx
+    mov bx, 0040h
+    mov es, bx
+    mov ax, [es:006Ch]
+    pop bx
+    pop es
+    ret
+; baja la pieza sola cuando pasa suficiente tiempo
+revisar_caida:
+    push ax
+    push bx
+
+    call leer_ticks
+    mov bx, ax
+    sub ax, [ticks_previos]
+    cmp ax, [velocidad]
+    jb .fin                     ; todavia  no baja
+
+    mov [ticks_previos], bx     ; reiniciar el conteo
+
+    inc byte [pieza_row]
+    call validar_posicion
+    cmp al, 1
+    je .baja
+
+    ;si no pudo bajar se fija y sale una nueva
+    dec byte [pieza_row]
+    call fijar_pieza
+    call nueva_pieza
+
+.baja:
+    call actualizar_pieza
+
+.fin:
+    pop bx
+    pop ax
+    ret
+
+puntero_forma:
+    push ax
+    push bx
+
+    mov al, [pieza_id]
+    mov ah, 0
+    mov bx, ax
+    mov dh, [colores + bx]      
+
+    mov si, ax
+    shl si, 5                   ; id * 32 (4 rotaciones de 8 bytes)
+
+    mov al, [pieza_rot]
+    mov ah, 0
+    shl ax, 3                   ; rotacion * 8
+    add si, ax
+
+    add si, formas
+
+    pop bx
+    pop ax
+    ret
+
+
+
+; girar la pieza si no cabe la deja como estaba
+rotar_pieza:
+    push ax
+    push bx
+
+    mov bl, [pieza_rot]         ; se guarda la rotacion actual
+    inc byte [pieza_rot]
+    and byte [pieza_rot], 3     ; (rotacion + 1) entre 0 y 3
+
+    call validar_posicion
+    cmp al, 1
+    je .ok
+
+    mov [pieza_rot], bl        
+
+.ok:
+    pop bx
+    pop ax
+    ret
+
+
 
 ; validar que la pieza no salga de los bordes
 ; y que no choque con una posicion ocupada
@@ -141,12 +244,7 @@ validar_posicion:
     push di
     push bp
 
-    mov al, [pieza_id]
-    mov ah, 0
-
-    mov si, ax
-    shl si, 3
-    add si, formas
+   call puntero_forma   ;si=forma actual
 
     mov cx, 4
 
@@ -237,6 +335,7 @@ fijar_pieza:
 nueva_pieza:
     mov byte [pieza_col], 3
     mov byte [pieza_row], 0
+    mov byte [pieza_rot], 0
 
     call pieza_aleatoria
 
@@ -282,15 +381,7 @@ colocar_pieza:
     push di
     push bp
 
-    mov ah, 0
-    mov bp, ax                 
-
-    mov bx, bp
-    mov dh, [colores + bx]     ; color de la puieza
-
-    mov si, bp
-    shl si, 3                  ; id * 8
-    add si, formas             
+    call puntero_forma       
 
     mov cx, 4                 
 
@@ -345,19 +436,7 @@ dibujar_pieza_activa:
     push di
     push bp
 
-
-    mov al, [pieza_id]
-    mov ah, 0
-
-
-    mov bx, ax
-    mov dh, [colores + bx]
-
-
-    mov si, ax
-    shl si, 3
-    add si, formas
-
+    call puntero_forma
 
     mov cx, 4
 
@@ -674,21 +753,49 @@ colores:
 
 
 ; las 5 piezas cada una con sus 4 bloques en pares 
+;cada pieza con su rotacion propia ahora 
 formas:
-    db 0,0, 1,0, 0,1, 1,1      ; O
-    db 1,0, 0,1, 1,1, 2,1      ; T
-    db 0,1, 1,1, 2,1, 3,1      ; I
-    db 2,0, 0,1, 1,1, 2,1      ; L
-    db 0,0, 1,0, 1,1, 2,1      ; Z
+    ; O  las rotaciones de este son iguales no cambia la vdd
+    db 0,0, 1,0, 0,1, 1,1
+    db 0,0, 1,0, 0,1, 1,1
+    db 0,0, 1,0, 0,1, 1,1
+    db 0,0, 1,0, 0,1, 1,1
+
+    ; T
+    db 1,0, 0,1, 1,1, 2,1
+    db 1,0, 1,1, 2,1, 1,2
+    db 0,0, 1,0, 2,0, 1,1
+    db 1,0, 0,1, 1,1, 1,2
+
+    ; I
+    db 0,1, 1,1, 2,1, 3,1
+    db 2,0, 2,1, 2,2, 2,3
+    db 0,2, 1,2, 2,2, 3,2
+    db 1,0, 1,1, 1,2, 1,3
+
+    ; L
+    db 2,0, 0,1, 1,1, 2,1
+    db 1,0, 1,1, 1,2, 2,2
+    db 0,0, 1,0, 2,0, 0,1
+    db 0,0, 1,0, 1,1, 1,2
+
+    ; Z
+    db 0,0, 1,0, 1,1, 2,1
+    db 2,0, 1,1, 2,1, 1,2
+    db 0,0, 1,0, 1,1, 2,1
+    db 2,0, 1,1, 2,1, 1,2
 
 
 
-; posicion y tipo de la pieza actual
+; posicion y tipo de la pieza actual y a rotacion
 pieza_col db 3
 pieza_row db 0
 pieza_id  db 0
+pieza_rot db 0
 
-
+;el control de la caida automatica ojala funcione 
+ticks_previos dw 0
+velocidad     dw 12       ; ticks entre cada caida 
 
 ; la matriz del tablero 
 tablero: times COLS*ROWS db 0
