@@ -2,6 +2,7 @@ bits 16
 org 100h
 
 COLOR_BORDE equ 15
+COLOR_FONDO equ 0
 
 ; medidas del tablero
 COLS  equ 10         
@@ -10,10 +11,21 @@ CELL  equ 8
 X0    equ 121         ; donde empieza la columna 
 Y0    equ 21          ; donde empieza la fila 
 
+; medidas del titulo de la portada
+TITULO_X equ 18
+TITULO_Y equ 45
 
 inicio:
+    call portada
     call iniciar_video
     call dibujar_tablero
+
+    mov si, txt_juego
+    mov dh, 2
+    mov dl, 27
+    mov bl, 15
+    call imprimir
+
     call limpiar_tablero
     call leer_ticks
     mov[ticks_previos], ax
@@ -104,6 +116,240 @@ inicio:
     call restaurar_video
     call salir_programa
 
+
+portada:
+    call iniciar_video            ;
+    mov byte [opcion], 0
+
+.redibujar:
+    call limpiar_pantalla
+    call dibujar_marco
+    call dibujar_titulo
+    call dibujar_menu
+    call dibujar_ayuda
+
+.tecla:
+    call leer_tecla
+
+    cmp ah, 48h                   ; arriba
+    je .arriba
+    cmp ah, 50h                   ; abajo
+    je .abajo
+    cmp al, 13                    ; ENTER
+    je .enter
+    cmp al, 27                    ; ESC
+    je .salir
+    jmp .tecla
+
+.arriba:
+    mov byte [opcion], 0
+    jmp .redibujar
+.abajo:
+    mov byte [opcion], 1
+    jmp .redibujar
+
+.enter:
+    cmp byte [opcion], 0
+    je .jugar                     ; INICIAR
+.salir:
+    call restaurar_video
+    call salir_programa
+
+.jugar:
+    ret
+
+
+
+; llena toda la pantalla con el color de fondo
+limpiar_pantalla:
+    push ax
+    push cx
+    push di
+    cld
+    xor di, di
+    mov cx, 64000
+    mov al, COLOR_FONDO
+    rep stosb
+    pop di
+    pop cx
+    pop ax
+    ret
+
+
+
+; marco decorativo
+dibujar_marco:
+    mov ax, 8
+    mov bx, 8
+    mov cx, 304
+    mov dl, 8
+    call linea_horizontal
+
+    mov ax, 8
+    mov bx, 190
+    mov cx, 304
+    mov dl, 8
+    call linea_horizontal
+
+    mov ax, 8
+    mov bx, 8
+    mov cx, 183
+    mov dl, 8
+    call linea_vertical
+
+    mov ax, 311
+    mov bx, 8
+    mov cx, 183
+    mov dl, 8
+    call linea_vertical
+    ret
+
+
+
+; dibuja tetris 67
+dibujar_titulo:
+    push ax
+    push bx
+    push cx
+    push dx
+    push si
+    push di
+
+    mov si, titulo_font
+    mov byte [t_glifo], 0
+
+.tg:                              
+    mov bl, [t_glifo]
+    mov bh, 0
+    mov al, [titulo_colores + bx]
+    mov [t_color], al
+
+    mov byte [t_fila], 0
+
+.tf:                              
+    mov al, [si]
+    mov [t_pat], al
+    inc si
+
+    mov byte [t_col], 0
+
+.tc:                           
+    mov cl, [t_col]
+    mov al, 4
+    shr al, cl                     
+    and al, [t_pat]
+    jz .sig_col                    
+
+
+    mov al, [t_glifo]
+    mov ah, 0
+    mov bx, ax
+    shl bx, 5
+    mov al, [t_col]
+    mov ah, 0
+    shl ax, 3
+    add bx, ax
+    add bx, TITULO_X
+
+    ; y = TITULO_Y + fila*8
+    mov al, [t_fila]
+    mov ah, 0
+    shl ax, 3
+    add ax, TITULO_Y
+
+    xchg ax, bx                     
+    mov dl, [t_color]
+    call dibujar_bloque
+
+.sig_col:
+    inc byte [t_col]
+    cmp byte [t_col], 3
+    jl .tc
+
+    inc byte [t_fila]
+    cmp byte [t_fila], 5
+    jl .tf
+
+    inc byte [t_glifo]
+    cmp byte [t_glifo], 9
+    jl .tg
+
+    pop di
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+
+
+; dibuja las dos opciones la elegida en amarillo
+dibujar_menu:
+    mov bl, 8
+    cmp byte [opcion], 0
+    jne .a
+    mov bl, 14
+.a:
+    mov si, txt_iniciar
+    mov dh, 15
+    mov dl, 16
+    call imprimir
+
+    mov bl, 8
+    cmp byte [opcion], 1
+    jne .b
+    mov bl, 14
+.b:
+    mov si, txt_salir
+    mov dh, 17
+    mov dl, 17
+    call imprimir
+    ret
+
+
+
+dibujar_ayuda:
+    mov si, txt_ayuda
+    mov dh, 22
+    mov dl, 5
+    mov bl, 7
+    call imprimir
+    ret
+
+
+
+; imprime texto con la fuente de la bios
+imprimir:
+    push ax
+    push bx
+    push cx
+    push dx
+    push si
+
+    cld
+    mov cl, bl                     
+
+    mov ah, 02h                     ; posicionar cursor
+    xor bh, bh
+    int 10h
+
+.pc:
+    lodsb
+    or al, al
+    jz .fin
+    mov ah, 0Eh
+    mov bl, cl
+    xor bh, bh
+    int 10h
+    jmp .pc
+.fin:
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
 
 
 iniciar_video:
@@ -796,6 +1042,35 @@ pieza_rot db 0
 ;el control de la caida automatica ojala funcione 
 ticks_previos dw 0
 velocidad     dw 12       ; ticks entre cada caida 
+
+; datos de la portada
+opcion   db 0
+t_glifo  db 0
+t_fila   db 0
+t_col    db 0
+t_color  db 0
+t_pat    db 0
+
+txt_iniciar db "INICIAR",0
+txt_salir   db "SALIR",0
+txt_ayuda   db "Flechas: elegir   ENTER: aceptar",0
+txt_juego   db "ESC = SALIR",0
+
+; color de cada letra del titulo
+titulo_colores db 12,14,10,11,13,9,0,12,14
+
+; fuente 3x5 del titulo
+titulo_font:
+    db 7,2,2,2,2       ; T
+    db 7,4,6,4,7       ; E
+    db 7,2,2,2,2       ; T
+    db 6,5,6,5,5       ; R
+    db 7,2,2,2,7       ; I
+    db 3,4,2,1,6       ; S
+    db 0,0,0,0,0       ; espacio
+    db 3,4,7,5,7       ; 6
+    db 7,1,2,2,2       ; 7
+
 
 ; la matriz del tablero 
 tablero: times COLS*ROWS db 0
