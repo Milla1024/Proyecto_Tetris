@@ -28,8 +28,9 @@ inicio:
 
     call limpiar_tablero
     mov byte [game_over], 0
+    mov word [puntuacion], 0
     call leer_ticks
-    mov[ticks_previos], ax
+    mov [ticks_previos], ax
 
     call nueva_pieza
     call actualizar_pieza
@@ -39,10 +40,6 @@ inicio:
 
     cmp byte [game_over], 1
     je .game_over
-
-    mov ah, 01h                
-    int 16h
-    jz .bucle
 
     mov ah, 01h                
     int 16h
@@ -111,6 +108,7 @@ inicio:
     dec byte [pieza_row]
 
     call fijar_pieza
+    call revisar_lineas
     call nueva_pieza
 
     cmp byte [game_over], 1
@@ -157,6 +155,7 @@ portada:
 .arriba:
     mov byte [opcion], 0
     jmp .redibujar
+
 .abajo:
     mov byte [opcion], 1
     jmp .redibujar
@@ -164,6 +163,7 @@ portada:
 .enter:
     cmp byte [opcion], 0
     je .jugar                     ; INICIAR
+
 .salir:
     call restaurar_video
     call salir_programa
@@ -252,7 +252,6 @@ dibujar_titulo:
     shr al, cl                     
     and al, [t_pat]
     jz .sig_col                    
-
 
     mov al, [t_glifo]
     mov ah, 0
@@ -356,6 +355,7 @@ imprimir:
     xor bh, bh
     int 10h
     jmp .pc
+
 .fin:
     pop si
     pop dx
@@ -363,6 +363,59 @@ imprimir:
     pop bx
     pop ax
     ret
+
+
+
+; imprime en decimal el numero que esta en AX
+imprimir_numero:
+    push ax
+    push bx
+    push cx
+    push dx
+
+    xor cx, cx
+    mov bx, 10
+
+    cmp ax, 0
+    jne .convertir
+
+    mov al, '0'
+    mov ah, 0Eh
+    mov bl, 15
+    xor bh, bh
+    int 10h
+    jmp .fin
+
+.convertir:
+    xor dx, dx
+    div bx
+
+    push dx
+    inc cx
+
+    cmp ax, 0
+    jne .convertir
+
+.imprimir_digitos:
+    pop dx
+    add dl, '0'
+
+    mov al, dl
+    mov ah, 0Eh
+    mov bl, 15
+    xor bh, bh
+    int 10h
+
+    loop .imprimir_digitos
+
+.fin:
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+
 
 ; pantalla que aparece cuando ya no caben mas piezas
 pantalla_game_over:
@@ -374,9 +427,18 @@ pantalla_game_over:
     mov bl, 12
     call imprimir
 
+    mov si, txt_puntuacion
+    mov dh, 1
+    mov dl, 1
+    mov bl, 15
+    call imprimir
+
+    mov ax, [puntuacion]
+    call imprimir_numero
+
     mov si, txt_game_over_salir
     mov dh, 13
-    mov dl, 10
+    mov dl, 5
     mov bl, 15
     call imprimir
 
@@ -390,6 +452,8 @@ pantalla_game_over:
 
 .volver:
     call inicio
+
+
 
 iniciar_video:
     mov ax, 0013h
@@ -430,6 +494,7 @@ actualizar_pieza:
     ret
 
 
+
 leer_ticks:
     push es 
     push bx
@@ -439,6 +504,9 @@ leer_ticks:
     pop bx
     pop es
     ret
+
+
+
 ; baja la pieza sola cuando pasa suficiente tiempo
 revisar_caida:
     push ax
@@ -460,6 +528,7 @@ revisar_caida:
     ;si no pudo bajar se fija y sale una nueva
     dec byte [pieza_row]
     call fijar_pieza
+    call revisar_lineas
     call nueva_pieza
 
 .baja:
@@ -469,6 +538,8 @@ revisar_caida:
     pop bx
     pop ax
     ret
+
+
 
 puntero_forma:
     push ax
@@ -529,10 +600,9 @@ validar_posicion:
     push di
     push bp
 
-   call puntero_forma   ;si=forma actual
+    call puntero_forma   ;si=forma actual
 
     mov cx, 4
-
 
 .vp:
     ; validar columna
@@ -552,7 +622,6 @@ validar_posicion:
 
     inc si
 
-
     ; validar fila
 
     xor ax, ax
@@ -568,7 +637,6 @@ validar_posicion:
 
     inc si
 
-
     ; calcular posicion dentro de la matriz
     ; posicion = fila * 10 + columna
 
@@ -579,23 +647,18 @@ validar_posicion:
 
     mov di, ax
 
-
     ; revisar si esa posicion ya esta ocupada
 
     cmp byte [tablero + di], 0
     jne .invalida
 
-
     loop .vp
-
 
     mov al, 1
     jmp .fin
 
-
 .invalida:
     mov al, 0
-
 
 .fin:
     pop bp
@@ -612,6 +675,118 @@ validar_posicion:
 fijar_pieza:
     mov al, [pieza_id]
     call colocar_pieza
+    ret
+
+
+
+; revisar si hay filas completas
+revisar_lineas:
+    push ax
+    push bx
+    push cx
+    push dx
+    push si
+    push di
+
+    mov bx, ROWS-1              ; comenzar desde la ultima fila
+
+.revisar_fila:
+    mov ax, bx
+    mov dx, COLS
+    mul dx                      ; AX = fila * 10
+    mov si, ax
+
+    mov cx, COLS
+
+.revisar_celda:
+    cmp byte [tablero + si], 0
+    je .fila_no_llena
+
+    inc si
+    loop .revisar_celda
+
+    ; si llegamos aqui las 10 posiciones estaban ocupadas
+    push bx
+    call eliminar_fila
+    pop bx
+
+    add word [puntuacion], 100
+
+    ; no bajamos de fila porque ahora hay una fila nueva
+    ; en esta misma posicion y tambien puede estar completa
+    jmp .revisar_fila
+
+.fila_no_llena:
+    dec bx
+    jns .revisar_fila
+
+    pop di
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+
+
+; elimina la fila BX y baja todas las filas superiores
+eliminar_fila:
+    push ax
+    push bx
+    push cx
+    push dx
+    push si
+    push di
+
+    cmp bx, 0
+    je .limpiar_primera
+
+.mover_fila:
+    ; destino = fila actual * 10
+
+    mov ax, bx
+    mov dx, COLS
+    mul dx
+    mov di, ax
+
+    ; origen = fila anterior * 10
+
+    dec bx
+
+    mov ax, bx
+    mov dx, COLS
+    mul dx
+    mov si, ax
+
+    mov cx, COLS
+
+.copiar:
+    mov al, [tablero + si]
+    mov [tablero + di], al
+
+    inc si
+    inc di
+    loop .copiar
+
+    cmp bx, 0
+    jne .mover_fila
+
+.limpiar_primera:
+    xor si, si
+    mov cx, COLS
+
+.limpiar:
+    mov byte [tablero + si], 0
+    inc si
+    loop .limpiar
+
+    pop di
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    pop ax
     ret
 
 
@@ -677,7 +852,6 @@ colocar_pieza:
 
     mov cx, 4                 
 
-
 .cp:
     mov al, [si]               
     add al, [pieza_col]          
@@ -706,7 +880,6 @@ colocar_pieza:
 
     loop .cp
 
-
     pop bp
     pop di
     pop si
@@ -732,7 +905,6 @@ dibujar_pieza_activa:
 
     mov cx, 4
 
-
 .dpa:
     ; calcular X
 
@@ -748,7 +920,6 @@ dibujar_pieza_activa:
 
     inc si
 
-
     ; calcular Y
 
     xor ax, ax
@@ -763,15 +934,12 @@ dibujar_pieza_activa:
 
     inc si
 
-
     mov ax, di
     mov dl, dh
 
     call dibujar_bloque
 
-
     loop .dpa
-
 
     pop bp
     pop di
@@ -794,7 +962,6 @@ dibujar_matriz:
 
     xor si, si
 
-
 .dm:
     mov ax, si
     xor dx, dx
@@ -802,43 +969,32 @@ dibujar_matriz:
     mov cx, COLS
     div cx                     
 
-
     push ax                    
-
 
     mov ax, dx                
     shl ax, 3                 
     add ax, X0                 
 
-
     pop cx                    
 
-
     push ax                   
-
 
     mov ax, cx
     shl ax, 3                  
     add ax, Y0                 
 
-
     mov bx, ax
-
 
     pop ax                     
 
-
     mov dl, [tablero + si]     
 
-
     call dibujar_bloque
-
 
     inc si
 
     cmp si, COLS*ROWS
     jl .dm
-
 
     pop si
     pop dx
@@ -865,7 +1021,6 @@ dibujar_bloque:
 
     mov cx, 8
 
-
 .fila:;Aqui se hace un calculo para la posicion del pixel por como se guarda vga 67*320+100 con nuestros datos arriba
 
     push cx
@@ -879,7 +1034,6 @@ dibujar_bloque:
 
     mov cx, 8
 
-
 .pixel:
     ;esto pinta hacia la derecha desde los 100 pixeles 8 pixeles hacia la derecha
 
@@ -891,7 +1045,6 @@ dibujar_bloque:
 
     pop cx
     loop .fila
-
 
     pop bp
     pop di
@@ -912,20 +1065,17 @@ dibujar_tablero:;se definen los bordes del tablero y luego se dibuja desde el bo
     mov dl, COLOR_BORDE
     call linea_horizontal
 
-
     mov ax, 120
     mov bx, 181
     mov cx, 82
     mov dl, COLOR_BORDE
     call linea_horizontal
 
-
     mov ax, 120
     mov bx, 20
     mov cx, 162;mide 162 pixeles
     mov dl, COLOR_BORDE
     call linea_vertical
-
 
     mov ax, 201
     mov bx, 20
@@ -957,12 +1107,10 @@ linea_horizontal:
     add ax, bp
     mov di, ax
 
-
 .ph:
     mov [es:di], bl
     inc di
     loop .ph
-
 
     pop bp
     pop di
@@ -988,7 +1136,6 @@ linea_vertical:
     mov si, bx
     mov bl, dl
 
-
 .pv:
     mov ax, si
     mov di, 320
@@ -1001,7 +1148,6 @@ linea_vertical:
 
     inc si
     loop .pv
-
 
     pop bp
     pop di
@@ -1085,10 +1231,11 @@ pieza_row db 0
 pieza_id  db 0
 pieza_rot db 0
 game_over db 0
+puntuacion dw 0
 
 ;el control de la caida automatica ojala funcione 
 ticks_previos dw 0
-velocidad     dw 12       ; ticks entre cada caida 
+velocidad     dw 6       ;talvez 7 ticks entre cada caida 
 
 ; datos de la portada
 opcion   db 0
