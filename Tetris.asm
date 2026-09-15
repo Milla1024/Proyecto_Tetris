@@ -22,7 +22,7 @@ inicio:
 
     mov si, txt_juego
     mov dh, 2
-    mov dl, 27
+    mov dl, 26
     mov bl, 15
     call imprimir
 
@@ -416,8 +416,6 @@ imprimir_numero:
     ret
 
 
-
-; pantalla que aparece cuando ya no caben mas piezas
 pantalla_game_over:
     call limpiar_pantalla
 
@@ -1001,6 +999,17 @@ dibujar_matriz:
     pop cx
     pop bx
     pop ax
+
+    mov si, txt_puntuacion
+    mov dh, 4
+    mov dl, 26
+    mov bl, 15
+    call imprimir
+    mov si, txt_salto
+    mov dh, 5
+    call imprimir
+    mov ax, [puntuacion]
+    call imprimir_numero
     ret
 
 
@@ -1249,7 +1258,7 @@ txt_iniciar db "INICIAR",0
 txt_salir   db "SALIR",0
 txt_ayuda   db "Flechas: elegir   ENTER: aceptar",0
 txt_juego   db "ESC = SALIR",0
-
+txt_salto   db "",0
 txt_game_over       db "GAME OVER",0
 txt_puntuacion      db "PUNTUACION: ",0
 txt_game_over_salir db "Presiona una tecla para salir",0
