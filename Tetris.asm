@@ -27,15 +27,22 @@ inicio:
     call imprimir
 
     call limpiar_tablero
+    mov byte [game_over], 0
     call leer_ticks
     mov[ticks_previos], ax
 
     call nueva_pieza
     call actualizar_pieza
 
-
 .bucle:
-    call revisar_caida          ; la pieza baja sola con el tiempo
+    call revisar_caida ;la pieza baja sola con el tiempo
+
+    cmp byte [game_over], 1
+    je .game_over
+
+    mov ah, 01h                
+    int 16h
+    jz .bucle
 
     mov ah, 01h                
     int 16h
@@ -61,6 +68,9 @@ inicio:
 
     jmp .bucle
 
+.game_over:
+    call pantalla_game_over
+    jmp .salir
 
 .rotar:
     call rotar_pieza
@@ -102,6 +112,9 @@ inicio:
 
     call fijar_pieza
     call nueva_pieza
+
+    cmp byte [game_over], 1
+    je .game_over
 
     call actualizar_pieza
     jmp .bucle
@@ -351,6 +364,32 @@ imprimir:
     pop ax
     ret
 
+; pantalla que aparece cuando ya no caben mas piezas
+pantalla_game_over:
+    call limpiar_pantalla
+
+    mov si, txt_game_over
+    mov dh, 10
+    mov dl, 15
+    mov bl, 12
+    call imprimir
+
+    mov si, txt_game_over_salir
+    mov dh, 13
+    mov dl, 10
+    mov bl, 15
+    call imprimir
+
+.input_game_over:
+    call leer_tecla
+    cmp al, 13                    
+    je .volver
+    jmp .input_game_over 
+
+    ret
+
+.volver:
+    call inicio
 
 iniciar_video:
     mov ax, 0013h
@@ -585,6 +624,13 @@ nueva_pieza:
 
     call pieza_aleatoria
 
+    call validar_posicion
+    cmp al, 1
+    je .np_fin
+
+    mov byte [game_over], 1
+
+.np_fin:
     ret
 
 
@@ -1038,6 +1084,7 @@ pieza_col db 3
 pieza_row db 0
 pieza_id  db 0
 pieza_rot db 0
+game_over db 0
 
 ;el control de la caida automatica ojala funcione 
 ticks_previos dw 0
@@ -1055,6 +1102,10 @@ txt_iniciar db "INICIAR",0
 txt_salir   db "SALIR",0
 txt_ayuda   db "Flechas: elegir   ENTER: aceptar",0
 txt_juego   db "ESC = SALIR",0
+
+txt_game_over       db "GAME OVER",0
+txt_puntuacion      db "PUNTUACION: ",0
+txt_game_over_salir db "Presiona una tecla para salir",0
 
 ; color de cada letra del titulo
 titulo_colores db 12,14,10,11,13,9,0,12,14
